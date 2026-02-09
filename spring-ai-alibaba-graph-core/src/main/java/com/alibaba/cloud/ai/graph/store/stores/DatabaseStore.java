@@ -46,6 +46,8 @@ public class DatabaseStore extends BaseStore {
 
 	private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
+	private String databaseType;
+
 	/**
 	 * Constructor with default table name.
 	 * @param dataSource database data source
@@ -64,6 +66,7 @@ public class DatabaseStore extends BaseStore {
 		this.tableName = tableName;
 		this.objectMapper = new ObjectMapper();
 		this.objectMapper.findAndRegisterModules();
+		detectDatabaseType();
 		initializeTable();
 	}
 
@@ -77,9 +80,7 @@ public class DatabaseStore extends BaseStore {
 			String namespaceJson = objectMapper.writeValueAsString(item.getNamespace());
 			String valueJson = objectMapper.writeValueAsString(item.getValue());
 
-			// Use MERGE for H2 compatibility instead of ON DUPLICATE KEY UPDATE
-			String sql = "MERGE INTO " + tableName + " (id, namespace, key_name, value_json, created_at, updated_at) "
-					+ "KEY(id) VALUES (?, ?, ?, ?, ?, ?)";
+			String sql = getUpsertSql();
 
 			try (Connection conn = dataSource.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
 
@@ -89,6 +90,14 @@ public class DatabaseStore extends BaseStore {
 				stmt.setString(4, valueJson);
 				stmt.setTimestamp(5, new Timestamp(item.getCreatedAt()));
 				stmt.setTimestamp(6, new Timestamp(item.getUpdatedAt()));
+
+				// For MySQL, we need to set the update values as well
+				if ("mysql".equalsIgnoreCase(databaseType)) {
+					stmt.setString(7, namespaceJson);
+					stmt.setString(8, item.getKey());
+					stmt.setString(9, valueJson);
+					stmt.setTimestamp(10, new Timestamp(item.getUpdatedAt()));
+				}
 
 				stmt.executeUpdate();
 			}
@@ -271,6 +280,53 @@ public class DatabaseStore extends BaseStore {
 	@Override
 	public boolean isEmpty() {
 		return size() == 0;
+	}
+
+	/**
+	 * Detect database type from connection metadata.
+	 */
+	private void detectDatabaseType() {
+		try (Connection conn = dataSource.getConnection()) {
+			String productName = conn.getMetaData().getDatabaseProductName().toLowerCase();
+			if (productName.contains("mysql")) {
+				databaseType = "mysql";
+			}
+			else if (productName.contains("h2")) {
+				databaseType = "h2";
+			}
+			else if (productName.contains("postgresql")) {
+				databaseType = "postgresql";
+			}
+			else if (productName.contains("oracle")) {
+				databaseType = "oracle";
+			}
+			else {
+				databaseType = "h2"; // Default to H2
+			}
+		}
+		catch (SQLException e) {
+			throw new RuntimeException("Failed to detect database type", e);
+		}
+	}
+
+	/**
+	 * Get the appropriate upsert SQL for the database type.
+	 * @return upsert SQL statement
+	 */
+	private String getUpsertSql() {
+		if ("mysql".equalsIgnoreCase(databaseType)) {
+			// MySQL uses INSERT ... ON DUPLICATE KEY UPDATE
+			return "INSERT INTO " + tableName
+					+ " (id, namespace, key_name, value_json, created_at, updated_at) "
+					+ "VALUES (?, ?, ?, ?, ?, ?) "
+					+ "ON DUPLICATE KEY UPDATE "
+					+ "namespace = ?, key_name = ?, value_json = ?, updated_at = ?";
+		}
+		else {
+			// H2 and other databases use MERGE INTO
+			return "MERGE INTO " + tableName + " (id, namespace, key_name, value_json, created_at, updated_at) "
+					+ "KEY(id) VALUES (?, ?, ?, ?, ?, ?)";
+		}
 	}
 
 	/**
