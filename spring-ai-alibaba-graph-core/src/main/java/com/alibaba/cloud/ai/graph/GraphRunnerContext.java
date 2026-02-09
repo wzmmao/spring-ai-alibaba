@@ -83,6 +83,7 @@ public class GraphRunnerContext {
 		this.compiledGraph = compiledGraph;
 		this.config = config;
 
+        // HUMAN_FEEDBACK key
 		if (config.metadata(RunnableConfig.HUMAN_FEEDBACK_METADATA_KEY).isPresent() || config.checkPointId().isPresent()) {
 			initializeFromResume(initialState, config);
 		} else {
@@ -241,16 +242,74 @@ public class GraphRunnerContext {
 	// Checkpoint Methods
 	// ================================================================================================================
 
+	/**
+	 * 添加一个新的检查点到检查点历史中。
+	 *
+	 * <p>此方法在节点执行完成后被调用，用于保存当前图的状态快照。
+	 * 检查点包含以下关键信息：
+	 * <ul>
+	 *   <li><b>nodeId</b>：刚刚执行完成的节点 ID</li>
+	 *   <li><b>state</b>：当前图的完整状态数据（深拷贝）</li>
+	 *   <li><b>nextNodeId</b>：下一个将要执行的节点 ID</li>
+	 * </ul>
+	 *
+	 * <p>检查点的作用：
+	 * <ul>
+	 *   <li><b>持久化</b>：将图的执行状态保存到存储介质</li>
+	 *   <li><b>恢复执行</b>：从中断点恢复图的执行</li>
+	 *   <li><b>时间旅行</b>：回溯到历史状态重新执行</li>
+	 *   <li><b>调试审计</b>：记录完整的执行轨迹</li>
+	 * </ul>
+	 *
+	 * <p>重要设计决策：
+	 * 此方法<b>强制将 checkPointId 设置为 null</b>，确保总是追加新的检查点，
+	 * 而不是替换现有的检查点。这样可以保留完整的执行历史，支持时间旅行功能。
+	 *
+	 * <p>调用时机：
+	 * <ul>
+	 *   <li>每个节点执行完成后（通过 {@link #buildNodeOutputAndAddCheckpoint}）</li>
+	 *   <li>中断点处（保存中断前的状态）</li>
+	 *   <li>关键节点处（用户显式创建快照）</li>
+	 * </ul>
+	 *
+	 * @param nodeId 刚刚执行完成的节点 ID，用于标识检查点的位置
+	 * @param nextNodeId 下一个将要执行的节点 ID，用于恢复执行时知道从哪里继续
+	 * @return 包含新创建的检查点的 Optional，如果没有配置检查点保存器则返回 empty
+	 * @throws Exception 如果检查点保存失败（如存储不可用、序列化错误等）
+	 */
 	public Optional<Checkpoint> addCheckpoint(String nodeId, String nextNodeId) throws Exception {
+		// 1. 检查是否配置了检查点保存器
+		// 如果没有配置，则不保存检查点（适用于不需要持久化的场景）
 		if (compiledGraph.compileConfig.checkpointSaver().isPresent()) {
-			var cp = Checkpoint.builder().nodeId(nodeId).state(cloneState(overallState.data())).nextNodeId(nextNodeId)
+
+			// 2. 构建检查点对象
+			// - nodeId: 当前执行完成的节点
+			// - state: 克隆当前状态（深拷贝，避免后续修改影响检查点）
+			// - nextNodeId: 下一个要执行的节点（用于恢复时继续执行）
+			var cp = Checkpoint.builder()
+					.nodeId(nodeId)
+					.state(cloneState(overallState.data()))
+					.nextNodeId(nextNodeId)
 					.build();
-			// Force checkPointId to null to ensure we append a new checkpoint instead of
-			// replacing the current one
-			RunnableConfig appendConfig = RunnableConfig.builder(config).checkPointId(null).build();
+
+			// 3. 强制将 checkPointId 设置为 null，确保追加新检查点
+			// 这是一个关键设计决策：
+			// - 如果保留 checkPointId，会替换现有检查点（更新模式）
+			// - 设置为 null，会创建新检查点（插入模式）
+			// - 追加模式保留完整历史，支持时间旅行和审计
+			RunnableConfig appendConfig = RunnableConfig.builder(config)
+					.checkPointId(null)
+					.build();
+
+			// 4. 调用检查点保存器保存检查点
+			// put() 方法返回更新后的配置，包含新生成的 checkPointId
 			this.config = compiledGraph.compileConfig.checkpointSaver().get().put(appendConfig, cp);
+
+			// 5. 返回新创建的检查点
 			return Optional.of(cp);
 		}
+
+		// 6. 如果没有配置检查点保存器，返回空 Optional
 		return Optional.empty();
 	}
 
@@ -456,34 +515,188 @@ public class GraphRunnerContext {
 		return buildNodeOutput(nodeId, updateStates, streaming);
 	}
 
+	/**
+	 * 构建节点输出对象。
+	 *
+	 * <p>此方法根据节点的状态更新数据构建一个 {@link NodeOutput} 对象，
+	 * 用于在图执行流程中传递节点的执行结果。输出对象包含节点 ID、消息、
+	 * 状态快照、Token 使用情况等信息。
+	 *
+	 * <p>核心功能：
+	 * <ul>
+	 *   <li><b>消息提取</b>：从状态更新中提取最新的消息（如 LLM 响应）</li>
+	 *   <li><b>输出类型确定</b>：根据是否流式和节点 ID 确定输出类型</li>
+	 *   <li><b>状态快照</b>：克隆当前状态，避免后续修改影响输出</li>
+	 *   <li><b>元数据附加</b>：附加 Agent 名称、Token 使用等元数据</li>
+	 * </ul>
+	 *
+	 * <h2>消息提取逻辑</h2>
+	 *
+	 * <p>方法会尝试从 {@code updateStates} 中提取 "messages" 字段的最新消息：
+	 *
+	 * <h3>场景 1：messages 是消息列表</h3>
+	 * <pre>{@code
+	 * updateStates = {
+	 *     "messages": [
+	 *         new UserMessage("你好"),
+	 *         new AssistantMessage("你好！有什么可以帮助你的？")  // ← 提取这个
+	 *     ]
+	 * }
+	 * }</pre>
+	 * <p>提取列表中的<b>最后一条消息</b>（通常是最新的 LLM 响应）
+	 *
+	 * <h3>场景 2：messages 是单个消息</h3>
+	 * <pre>{@code
+	 * updateStates = {
+	 *     "messages": new AssistantMessage("你好！")  // ← 直接使用
+	 * }
+	 * }</pre>
+	 * <p>直接使用这个消息对象
+	 *
+	 * <h3>场景 3：没有 messages 字段</h3>
+	 * <pre>{@code
+	 * updateStates = {
+	 *     "result": "some data",
+	 *     "count": 42
+	 * }
+	 * }</pre>
+	 * <p>message 为 null，输出对象不包含消息内容
+	 *
+	 * <h2>输出类型（OutputType）</h2>
+	 *
+	 * <p>输出类型由两个因素决定：
+	 * <ul>
+	 *   <li><b>streaming</b>：是否是流式输出
+	 *       <ul>
+	 *         <li>true：流式输出（如 LLM 流式响应的中间块）</li>
+	 *         <li>false：完整输出（如节点执行完成后的最终结果）</li>
+	 *       </ul>
+	 *   </li>
+	 *   <li><b>nodeId</b>：节点 ID，用于标识输出来源</li>
+	 * </ul>
+	 *
+	 * <h2>StreamingOutput 构造</h2>
+	 *
+	 * <p>根据是否提取到消息，使用不同的构造器：
+	 *
+	 * <h3>包含消息的输出</h3>
+	 * <pre>{@code
+	 * new StreamingOutput<>(
+	 *     message,           // 提取的消息对象（如 AssistantMessage）
+	 *     nodeId,            // 节点 ID（如 "llm_node"）
+	 *     agentName,         // Agent 名称（从配置元数据中获取）
+	 *     stateSnapshot,     // 当前状态的克隆快照
+	 *     tokenUsage,        // Token 使用统计
+	 *     outputType         // 输出类型（流式/完整）
+	 * )
+	 * }</pre>
+	 *
+	 * <h3>不包含消息的输出</h3>
+	 * <pre>{@code
+	 * new StreamingOutput<>(
+	 *     nodeId,            // 节点 ID
+	 *     agentName,         // Agent 名称
+	 *     stateSnapshot,     // 状态快照
+	 *     tokenUsage,        // Token 使用统计
+	 *     outputType         // 输出类型
+	 * )
+	 * }</pre>
+	 *
+	 * <h2>使用场景</h2>
+	 *
+	 * <ul>
+	 *   <li><b>流式 LLM 响应</b>：
+	 *       <ul>
+	 *         <li>streaming = true</li>
+	 *         <li>每个流式块都会调用此方法构建输出</li>
+	 *         <li>message 包含当前块的内容</li>
+	 *       </ul>
+	 *   </li>
+	 *   <li><b>节点执行完成</b>：
+	 *       <ul>
+	 *         <li>streaming = false</li>
+	 *         <li>构建节点的最终输出</li>
+	 *         <li>message 包含完整的响应</li>
+	 *       </ul>
+	 *   </li>
+	 *   <li><b>非消息节点</b>：
+	 *       <ul>
+	 *         <li>节点不产生消息（如数据处理节点）</li>
+	 *         <li>message = null</li>
+	 *         <li>输出仅包含状态快照</li>
+	 *       </ul>
+	 *   </li>
+	 * </ul>
+	 *
+	 * @param nodeId 节点 ID，标识输出来源的节点
+	 * @param updateStates 节点的状态更新数据，可能包含 "messages" 字段
+	 * @param streaming 是否是流式输出
+	 *                  - true: 流式输出（LLM 流式响应的中间块）
+	 *                  - false: 完整输出（节点执行完成后的最终结果）
+	 * @return 构建的节点输出对象，包含消息、状态快照、元数据等信息
+	 * @throws Exception 如果状态克隆失败或构建输出时发生错误
+	 */
 	public NodeOutput buildNodeOutput(String nodeId, Map<String, Object> updateStates, boolean streaming) throws Exception {
+		// 用于存储提取的消息对象
 		Message message = null;
 
-		// Check if updateStates is not empty
+		// 1. 尝试从状态更新中提取消息
+		// 只有当 updateStates 不为空时才进行提取
 		if (updateStates != null && !updateStates.isEmpty()) {
-			// Check if "messages" key exists and is a List
+			// 1.1 获取 "messages" 字段的值
+			// 这个字段通常由 LLM 节点或消息处理节点设置
 			Object messagesObj = updateStates.get("messages");
+
+			// 1.2 检查 messages 是否是消息列表
 			if (messagesObj instanceof List<?> messagesList && !messagesList.isEmpty()) {
-				// Get the last element
+				// 场景 1：messages 是一个非空列表
+				// 例如：[UserMessage, AssistantMessage, ToolMessage]
+
+				// 获取列表中的最后一个元素（最新的消息）
+				// 在对话场景中，最后一条消息通常是最新的 LLM 响应
 				Object lastElement = messagesList.get(messagesList.size() - 1);
-				// Check if it's a Message type
+
+				// 检查最后一个元素是否是 Message 类型
 				if (lastElement instanceof Message) {
 					message = (Message) lastElement;
 				}
 			} else if (messagesObj instanceof Message singleMessage) {
-				// If it's a single Message instance
+				// 场景 2：messages 是单个 Message 对象
+				// 例如：messages = new AssistantMessage("你好")
+				// 直接使用这个消息
 				message = singleMessage;
 			}
+			// 场景 3：messages 不存在或不是 Message 类型
+			// message 保持为 null
 		}
 
+		// 2. 确定输出类型
+		// OutputType 根据是否流式和节点 ID 来确定
+		// 例如：
+		// - streaming=true, nodeId="llm" → STREAMING
+		// - streaming=false, nodeId="llm" → COMPLETE
 		OutputType outputType = OutputType.from(streaming, nodeId);
 
+		// 3. 构建并返回 StreamingOutput 对象
 		if (message != null) {
-			return new StreamingOutput<>(message, nodeId, (String) config.metadata("_AGENT_").orElse(""),
-					cloneState(this.overallState.data()), tokenUsage, outputType);
+			// 3.1 包含消息的输出（适用于 LLM 节点、消息处理节点等）
+			return new StreamingOutput<>(
+					message,                                              // 提取的消息对象
+					nodeId,                                               // 节点 ID
+					(String) config.metadata("_AGENT_").orElse(""),      // Agent 名称（从配置元数据获取）
+					cloneState(this.overallState.data()),                // 当前状态的深拷贝快照
+					tokenUsage,                                           // Token 使用统计
+					outputType                                            // 输出类型
+			);
 		} else {
-			return new StreamingOutput<>(nodeId, (String) config.metadata("_AGENT_").orElse(""),
-					cloneState(this.overallState.data()), tokenUsage, outputType);
+			// 3.2 不包含消息的输出（适用于数据处理节点、工具节点等）
+			return new StreamingOutput<>(
+					nodeId,                                               // 节点 ID
+					(String) config.metadata("_AGENT_").orElse(""),      // Agent 名称
+					cloneState(this.overallState.data()),                // 状态快照
+					tokenUsage,                                           // Token 使用统计
+					outputType                                            // 输出类型
+			);
 		}
 	}
 

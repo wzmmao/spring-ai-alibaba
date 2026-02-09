@@ -298,6 +298,21 @@
     </dependencyManagement>
 
     <repositories>
+
+        <!-- aliyun：优先使用阿里云镜像 -->
+        <repository>
+            <!-- 只使用正式版本，不使用快照版本 -->
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+            <id>aliyun-public</id>
+            <name>Aliyun Maven Public Repository</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </repository>
+
         <repository>
             <snapshots>
                 <enabled>false</enabled>
@@ -338,6 +353,36 @@
             <url>https://oss.sonatype.org/content/repositories/snapshots</url>
         </repository>
     </repositories>
+
+    <!-- 第三方插件远程仓库 -->
+    <pluginRepositories>
+        <!-- aliyun -->
+        <pluginRepository>
+            <!-- 只使用正式版本，不使用快照版本 -->
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <id>aliyun-plugin-repo</id>
+            <name>Aliyun Plugin Repository</name>
+            <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
+        </pluginRepository>
+        <!-- LZ：兜底公司内部私服插件仓库 -->
+        <pluginRepository>
+            <!-- 只使用正式版本，不使用快照版本 -->
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <id>company-plugin-repo</id>
+            <name>Company Plugin Repository</name>
+            <url>http://maven.lizhi.fm:8081/nexus/content/groups/public/</url>
+        </pluginRepository>
+    </pluginRepositories>
 
     <build>
         <pluginManagement>
@@ -644,5 +689,4 @@
             </build>
         </profile>
     </profiles>
-
 </project>

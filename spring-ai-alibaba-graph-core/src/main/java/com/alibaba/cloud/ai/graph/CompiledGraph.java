@@ -693,6 +693,7 @@ public class CompiledGraph {
 		// Enforce Execution ID availability
 		if (!inputs.containsKey(GraphLifecycleListener.EXECUTION_ID_KEY)) {
 			Map<String, Object> newInputs = new HashMap<>(inputs);
+            // 增加默认输入： _graph_execution_id_
 			newInputs.put(GraphLifecycleListener.EXECUTION_ID_KEY, java.util.UUID.randomUUID().toString());
 			inputs = newInputs;
 		}

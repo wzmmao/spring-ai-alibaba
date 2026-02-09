@@ -442,6 +442,7 @@ public class MysqlSaver extends MemorySaver {
 
 	/**
 	 * Initializes the database according the create options.
+     * 实现有点过于粗糙了
 	 */
 	protected void initTables() {
 		try (Connection connection = dataSource.getConnection();

@@ -46,6 +46,7 @@ public class GraphRunner {
 	}
 
 	public Flux<GraphResponse<NodeOutput>> run(OverAllState initialState) {
+        // Flux.defer()：延迟创建 Flux 实例直到有订阅者订阅时。
 		return Flux.defer(() -> {
 			try {
 				GraphRunnerContext context = new GraphRunnerContext(initialState, config, compiledGraph);
