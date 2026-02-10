@@ -17,6 +17,8 @@ package com.alibaba.cloud.ai.graph.store.stores;
 
 import com.alibaba.cloud.ai.graph.store.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -38,7 +40,8 @@ import java.util.stream.Collectors;
  */
 public class DatabaseStore extends BaseStore {
 
-	private final DataSource dataSource;
+    private static final Logger log = LoggerFactory.getLogger(DatabaseStore.class);
+    private final DataSource dataSource;
 
 	private final ObjectMapper objectMapper;
 
@@ -91,16 +94,17 @@ public class DatabaseStore extends BaseStore {
 				stmt.setTimestamp(5, new Timestamp(item.getCreatedAt()));
 				stmt.setTimestamp(6, new Timestamp(item.getUpdatedAt()));
 
-				// For MySQL, we need to set the update values as well
-				if ("mysql".equalsIgnoreCase(databaseType)) {
-					stmt.setString(7, namespaceJson);
-					stmt.setString(8, item.getKey());
-					stmt.setString(9, valueJson);
-					stmt.setTimestamp(10, new Timestamp(item.getUpdatedAt()));
-				}
+				//// For MySQL, we need to set the update values as well
+				//if ("mysql".equalsIgnoreCase(databaseType)) {
+				//	stmt.setString(7, namespaceJson);
+				//	stmt.setString(8, item.getKey());
+				//	stmt.setString(9, valueJson);
+				//	stmt.setTimestamp(10, new Timestamp(item.getUpdatedAt()));
+				//}
 
-				stmt.executeUpdate();
-			}
+                int count = stmt.executeUpdate();
+                log.info("Upserted {} item(s) into database", count);
+            }
 		}
 		catch (Exception e) {
 			throw new RuntimeException("Failed to store item in database", e);
@@ -318,9 +322,9 @@ public class DatabaseStore extends BaseStore {
 			// MySQL uses INSERT ... ON DUPLICATE KEY UPDATE
 			return "INSERT INTO " + tableName
 					+ " (id, namespace, key_name, value_json, created_at, updated_at) "
-					+ "VALUES (?, ?, ?, ?, ?, ?) "
-					+ "ON DUPLICATE KEY UPDATE "
-					+ "namespace = ?, key_name = ?, value_json = ?, updated_at = ?";
+					+ "VALUES (?, ?, ?, ?, ?, ?) ";
+					//+ "ON DUPLICATE KEY UPDATE "
+					//+ "namespace = ?, key_name = ?, value_json = ?, updated_at = ?";
 		}
 		else {
 			// H2 and other databases use MERGE INTO
@@ -333,10 +337,29 @@ public class DatabaseStore extends BaseStore {
 	 * Initialize database table.
 	 */
     private void initializeTable() {
-        // Create table with database-agnostic SQL
-        String sql = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + "id TEXT PRIMARY KEY, "
-                + "namespace TEXT, " + "key_name VARCHAR(500), " + "value_json TEXT, " + "created_at TIMESTAMP, "
-                + "updated_at TIMESTAMP" + ")";
+        String sql;
+
+        if ("mysql".equalsIgnoreCase(databaseType)) {
+            // MySQL: Use VARCHAR for id (primary key), TEXT for other fields
+            sql = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
+                    + "id VARCHAR(767) PRIMARY KEY, "  // MySQL max key length for utf8mb4
+                    + "namespace TEXT, "
+                    + "key_name VARCHAR(500), "
+                    + "value_json TEXT, "
+                    + "created_at TIMESTAMP NULL DEFAULT NULL, "
+                    + "updated_at TIMESTAMP NULL DEFAULT NULL"
+                    + ")";
+        } else {
+            // H2 and other databases: TEXT is fine for primary key
+            sql = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
+                    + "id TEXT PRIMARY KEY, "
+                    + "namespace TEXT, "
+                    + "key_name VARCHAR(500), "
+                    + "value_json TEXT, "
+                    + "created_at TIMESTAMP, "
+                    + "updated_at TIMESTAMP"
+                    + ")";
+        }
 
         try (Connection conn = dataSource.getConnection(); Statement stmt = conn.createStatement()) {
             stmt.executeUpdate(sql);

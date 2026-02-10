@@ -34,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
+ * 从 DatabaseStoreTest 的H2改为MySQL
  * Unit tests for DatabaseStore implementation using MySQL database.
  *
  * @author Spring AI Alibaba

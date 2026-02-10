@@ -20,6 +20,7 @@ import com.alibaba.cloud.ai.graph.store.StoreItem;
 import com.alibaba.cloud.ai.graph.store.StoreSearchRequest;
 import com.alibaba.cloud.ai.graph.store.StoreSearchResult;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,6 +29,9 @@ import javax.sql.DataSource;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.h2.tools.Server;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -43,8 +47,25 @@ class DatabaseStoreTest {
 
 	private DatabaseStore databaseStore;
 
-	@BeforeEach
-	void setUp() {
+    @BeforeAll
+    static void startH2Servers() throws SQLException {
+        // 启动TCP服务器
+        var tcpServer = Server.createTcpServer(
+                "-tcp", "-tcpPort", "9092",
+                "-tcpAllowOthers", "-ifNotExists"
+        ).start();
+
+        // 启动Web控制台
+        var webServer = Server.createWebServer(
+                "-web", "-webPort", "8082",
+                "-webAllowOthers", "-webDaemon"
+        ).start();
+        System.out.println("H2 Console available at: http://localhost:8082");
+    }
+
+
+    @BeforeEach
+	void setUp() throws SQLException {
 		// Create H2 in-memory database with unique URL for test isolation
 		String dbUrl = "jdbc:h2:mem:testdb" + System.nanoTime() + ";DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE";
 		HikariConfig config = new HikariConfig();
@@ -56,6 +77,10 @@ class DatabaseStoreTest {
 		DataSource dataSource = new HikariDataSource(config);
 		databaseStore = new DatabaseStore(dataSource, "test_store");
 	}
+    @AfterAll
+    static void end() throws InterruptedException {
+        Thread.currentThread().join();
+    }
 
 	@Test
 	void testPutAndGetItem() {

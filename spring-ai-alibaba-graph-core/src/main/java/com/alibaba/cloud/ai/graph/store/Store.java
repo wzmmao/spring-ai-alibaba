@@ -19,27 +19,23 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Interface for long-term memory storage in multi-agent systems.
+ * 多智能体系统中的长期内存存储接口。
  * <p>
- * Store provides persistent, cross-session memory management capabilities, supporting
- * hierarchical namespaces and structured data storage. This is different from
- * CheckpointSaver which focuses on short-term graph state persistence.
+ * Store 提供持久化的跨会话内存管理能力，支持层级命名空间和结构化数据存储。
+ * 这与专注于短期图状态持久化的 CheckpointSaver 不同。
  * </p>
  *
- * <h2>Key Features</h2>
+ * <h2>核心特性</h2>
  * <ul>
- * <li><strong>Hierarchical Namespaces:</strong> Organize data using nested
- * namespaces</li>
- * <li><strong>Structured Data:</strong> Store complex Map-based data structures</li>
- * <li><strong>Search and Filter:</strong> Query data by namespace, key patterns, and
- * content</li>
- * <li><strong>Pagination:</strong> Support for large result sets with offset/limit</li>
- * <li><strong>Cross-Session:</strong> Data persists across different execution
- * sessions</li>
+ * <li><strong>层级命名空间：</strong>使用嵌套命名空间组织数据</li>
+ * <li><strong>结构化数据：</strong>存储基于 Map 的复杂数据结构</li>
+ * <li><strong>搜索和过滤：</strong>通过命名空间、键模式和内容查询数据</li>
+ * <li><strong>分页支持：</strong>支持使用 offset/limit 处理大型结果集</li>
+ * <li><strong>跨会话：</strong>数据在不同执行会话之间持久化</li>
  * </ul>
  *
- * <h2>Usage Example</h2> <pre>{@code
- * // Store user preferences
+ * <h2>使用示例</h2> <pre>{@code
+ * // 存储用户偏好设置
  * StoreItem preferences = StoreItem.of(
  *     List.of("users", "user123", "preferences"),
  *     "ui_settings",
@@ -47,13 +43,13 @@ import java.util.Optional;
  * );
  * store.putItem(preferences);
  *
- * // Retrieve data
+ * // 检索数据
  * Optional<StoreItem> item = store.getItem(
  *     List.of("users", "user123", "preferences"),
  *     "ui_settings"
  * );
  *
- * // Search for items
+ * // 搜索条目
  * StoreSearchRequest searchRequest = StoreSearchRequest.builder()
  *     .namespace("users")
  *     .query("preferences")
@@ -68,65 +64,63 @@ import java.util.Optional;
 public interface Store {
 
 	/**
-	 * Store an item in the specified namespace with the given key. If an item with the
-	 * same namespace and key already exists, it will be updated.
-	 * @param item the item to store
-	 * @throws IllegalArgumentException if item is null or invalid
+	 * 在指定命名空间中使用给定的键存储一个条目。如果具有相同命名空间和键的条目已存在，则会被更新。
+	 * @param item 要存储的条目
+	 * @throws IllegalArgumentException 如果 item 为 null 或无效
 	 */
 	void putItem(StoreItem item);
 
 	/**
-	 * Retrieve an item from the specified namespace with the given key.
-	 * @param namespace the hierarchical namespace path
-	 * @param key the item key
-	 * @return Optional containing the item if found, empty otherwise
-	 * @throws IllegalArgumentException if namespace or key is null/invalid
+	 * 从指定命名空间中使用给定的键检索一个条目。
+	 * @param namespace 层级命名空间路径
+	 * @param key 条目键
+	 * @return 如果找到则返回包含条目的 Optional，否则返回空
+	 * @throws IllegalArgumentException 如果 namespace 或 key 为 null/无效
 	 */
 	Optional<StoreItem> getItem(List<String> namespace, String key);
 
 	/**
-	 * Delete an item from the specified namespace with the given key.
-	 * @param namespace the hierarchical namespace path
-	 * @param key the item key
-	 * @return true if the item was deleted, false if it didn't exist
-	 * @throws IllegalArgumentException if namespace or key is null/invalid
+	 * 从指定命名空间中删除具有给定键的条目。
+	 * @param namespace 层级命名空间路径
+	 * @param key 条目键
+	 * @return 如果条目被删除则返回 true，如果不存在则返回 false
+	 * @throws IllegalArgumentException 如果 namespace 或 key 为 null/无效
 	 */
 	boolean deleteItem(List<String> namespace, String key);
 
 	/**
-	 * Search for items based on the provided search criteria.
-	 * @param searchRequest the search parameters
-	 * @return search results with matching items
-	 * @throws IllegalArgumentException if searchRequest is null
+	 * 根据提供的搜索条件搜索条目。
+	 * @param searchRequest 搜索参数
+	 * @return 包含匹配条目的搜索结果
+	 * @throws IllegalArgumentException 如果 searchRequest 为 null
 	 */
 	StoreSearchResult searchItems(StoreSearchRequest searchRequest);
 
 	/**
-	 * List available namespaces based on the provided criteria.
-	 * @param namespaceRequest the namespace listing parameters
-	 * @return list of namespace paths
-	 * @throws IllegalArgumentException if namespaceRequest is null
+	 * 根据提供的条件列出可用的命名空间。
+	 * @param namespaceRequest 命名空间列表参数
+	 * @return 命名空间路径列表
+	 * @throws IllegalArgumentException 如果 namespaceRequest 为 null
 	 */
 	List<String> listNamespaces(NamespaceListRequest namespaceRequest);
 
 	/**
-	 * Clear all items from the store.
+	 * 清除存储中的所有条目。
 	 * <p>
-	 * <strong>WARNING:</strong> This operation is irreversible and will remove all stored
-	 * data.
+	 * <strong>警告：</strong>此操作不可逆，将删除所有存储的数据。
 	 * </p>
 	 */
 	void clear();
 
 	/**
-	 * Get the total number of items in the store.
-	 * @return the number of items stored
+	 * 获取存储中条目的总数。
+	 * @return 存储的条目数量
 	 */
 	long size();
 
 	/**
-	 * Check if the store is empty.
-	 * @return true if the store contains no items, false otherwise
+	 * 检查存储是否为空。
+	 * @return 如果存储不包含任何条目则返回 true，否则返回 false
 	 */
 	boolean isEmpty();
 
