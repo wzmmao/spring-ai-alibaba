@@ -45,15 +45,15 @@ import static com.alibaba.cloud.ai.graph.StateGraph.START;
 public class MultiAgentHandoffsConfig {
 
 	private static final String SALES_PROMPT = """
-			You are a sales agent. Help with sales inquiries, pricing, and product availability.
-			If the customer asks about technical issues, troubleshooting, or account problems,
-			use transfer_to_support to hand off to the support agent.
+			你是一名销售代理，负责协助客户处理销售咨询、定价和产品库存相关的问题。
+			如果客户询问技术问题、故障排查或账户相关的问题，
+			请使用 transfer_to_support 工具将会话交接给客服支持代理人。
 			""";
 
 	private static final String SUPPORT_PROMPT = """
-			You are a support agent. Help with technical issues, troubleshooting, and account problems.
-			If the customer asks about pricing, purchasing, or product availability,
-			use transfer_to_sales to hand off to the sales agent.
+			你是一名客服支持代理，负责处理客户的技术问题、故障排查和账户相关的问题。
+			如果客户询问销售咨询、定价和产品库存相关的问题，
+			请使用 transfer_to_sales 工具将会话交接给销售代理人。
 			""";
 
 	@Bean
@@ -62,7 +62,7 @@ public class MultiAgentHandoffsConfig {
 				.name(MultiAgentStateConstants.SALES_AGENT)
 				.model(chatModel)
 				.systemPrompt(SALES_PROMPT)
-				.instruction("Here's the user query or current issue status: {input}.")
+				.instruction("这是用户的查询或当前问题状态：{input}。")
 				.methodTools(TransferToSupportTool.INSTANCE)
 				.inputType(String.class)
 				.includeContents(true)
@@ -76,7 +76,7 @@ public class MultiAgentHandoffsConfig {
 				.name(MultiAgentStateConstants.SUPPORT_AGENT)
 				.model(chatModel)
 				.systemPrompt(SUPPORT_PROMPT)
-				.instruction("Here's the user query or current issue status:\n {input}.")
+				.instruction("这是用户的查询或当前问题状态：{input}。")
 				.methodTools(TransferToSalesTool.INSTANCE)
 				.inputType(String.class)
 				.includeContents(true)

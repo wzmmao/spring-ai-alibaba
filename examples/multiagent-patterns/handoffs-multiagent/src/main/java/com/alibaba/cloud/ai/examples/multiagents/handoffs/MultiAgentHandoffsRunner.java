@@ -39,7 +39,7 @@ public class MultiAgentHandoffsRunner implements ApplicationRunner {
 
 	@Override
 	public void run(ApplicationArguments args) throws Exception {
-		String query = "Hi, I'm having trouble with my account login. Can you help?";
+		String query = "你好，我的账户登录遇到问题。你能帮忙吗？";
 		log.info("Query: {}", query);
 		MultiAgentHandoffsService.MultiAgentHandoffsResult result = service.run(query);
 		log.info("Response messages:");

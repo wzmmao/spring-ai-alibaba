@@ -36,7 +36,7 @@ public final class TransferToSupportTool {
 
 	@Tool(
 			name = "transfer_to_support",
-			description = "Transfer the conversation to the support agent. Use when the customer asks about technical issues, troubleshooting, or account problems.",
+			description = "将会话交接给客服支持代理人。使用当客户询问技术问题、故障排查或账户相关的问题。",
 			returnDirect = true)
 	public String transferToSupport(ToolContext toolContext) {
 		ToolContextHelper.getStateForUpdate(toolContext).ifPresent(update ->

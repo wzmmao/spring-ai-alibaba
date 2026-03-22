@@ -31,10 +31,13 @@ public class RouteInitialAction implements AsyncCommandAction {
 
 	@Override
 	public CompletableFuture<Command> apply(OverAllState state, RunnableConfig config) {
-		String target = state.value(MultiAgentStateConstants.ACTIVE_AGENT)
-				.map(Object::toString)
-				.filter(MultiAgentStateConstants.SUPPORT_AGENT::equals)
-				.orElse(MultiAgentStateConstants.SALES_AGENT);
+		// 尝试获取状态中的 active_agent，并转换为字符串
+		// 如果 active_agent 是 "support_agent"，则返回 "support_agent"
+		// 否则（如果未设置或不是 "support_agent"），默认返回 "sales_agent"
+		String target = state.value(MultiAgentStateConstants.ACTIVE_AGENT) // 获取 active_agent 状态值
+				.map(Object::toString) // 转换为字符串（如果存在）
+				.filter(MultiAgentStateConstants.SUPPORT_AGENT::equals) // 只有等于 "support_agent" 保留，否则变为 empty
+				.orElse(MultiAgentStateConstants.SALES_AGENT); // 如果不是 "support_agent" 或未设置，默认用 "sales_agent"
 		return CompletableFuture.completedFuture(new Command(target));
 	}
 }

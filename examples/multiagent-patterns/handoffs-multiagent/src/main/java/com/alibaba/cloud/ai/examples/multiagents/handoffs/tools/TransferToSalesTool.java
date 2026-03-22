@@ -36,7 +36,7 @@ public final class TransferToSalesTool {
 
 	@Tool(
 			name = "transfer_to_sales",
-			description = "Transfer the conversation to the sales agent. Use when the customer asks about pricing, purchasing, or product availability.",
+			description = "将会话交接给销售代理人。使用当客户询问销售咨询、定价和产品库存相关的问题。",
 			returnDirect = true)
 	public String transferToSales(ToolContext toolContext) {
 		ToolContextHelper.getStateForUpdate(toolContext).ifPresent(update ->

@@ -85,6 +85,10 @@ public class AgentScopeHandoffsConfig {
 				.build();
 	}
 
+    /**
+     * 使用的是 AgentScopeAgent
+     * 对比 /Users/milo/MyCareer/Codes/source-frame/ai/spring-ai-alibaba/examples/multiagent-patterns/handoffs-multiagent/src/main/java/com/alibaba/cloud/ai/examples/multiagents/handoffs/MultiAgentHandoffsConfig.java
+     */
 	@Bean
 	public AgentScopeAgent supportAgent(@Value("${spring.ai.dashscope.api-key:}") String apiKey) {
 		String key = StringUtils.hasText(apiKey) ? apiKey : System.getenv("AI_DASHSCOPE_API_KEY");
